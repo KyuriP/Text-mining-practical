@@ -1,0 +1,580 @@
+---
+title: "Text Mining Practical 2"
+subtitle: "Regular expressions and word embedding"
+author: "Javier Garcia Bernardo"
+params:
+  answers: false
+urlcolor: blue
+output:
+  html_document:
+    #code_folding: hide
+    toc: true
+    toc_depth: 1
+    toc_float: true
+    theme: paper
+    highlight: tango
+    df_print: !expr pander::pander
+---
+
+<style type="text/css">
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@300;400&display=swap');
+
+body{ /* Normal  */
+  font-size: 13px;
+  font-family: 'Lato', sans-serif;
+  }
+h1.title {
+  font-size: 25px;
+  color: DarkBlue;
+  margin-bottom:5px;
+}
+h3.subtitle{ /* Subtitle */
+  font-size: 20px;
+  color: DarkBlue;
+  margin-top:0;
+}
+
+h1 { /* Header 1 */
+  font-size: 20px;
+  font-weight: bold;
+}
+h2 { /* Header 2 */
+  font-size: 17px;
+  line-height: 1.6;
+}
+h3 { /* Header 3 */
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+pre { /* Code block - determines code spacing between lines */
+  font-size: 13px;
+}
+
+</style>
+<hr>
+```{r setup, include=FALSE}
+library(knitr)
+
+knit_engines$set(comment = function(options) {
+  if(params$answers) options$code
+})
+
+opts_chunk$set(include = params$answers,
+                      # echo = params$answers,
+                      message = FALSE,
+                      warning = FALSE,
+                      comment = NA)
+
+# collapse = TRUE  --> see if it is necessary any where
+```
+
+Welcome to the second practical on text mining!
+The aim of this practical is to introduce you how to write the regular expressions and apply a word embedding method to represent the text data.
+
+In this practical, we will perform the followings:
+
+ - Visualize the most frequent words in a data set by a word cloud and a bar plot.
+ - Use regular expressions to retrieve information from text .
+ - Create word embeddings.
+ - (optional) Use pre-trained word embeddings.
+
+
+# Preparation
+In this practical, we make use of the following packages:
+```{r load_packages, include =TRUE}
+library(magrittr)  # for pipes
+library(tidyverse) # for tidy data and pipes
+library(ggplot2)   # for visualization
+library(wordcloud) # to create pretty word clouds
+library(stringr)   # for regular expressions
+library(text2vec)  # for word embedding
+library(tidytext)  # for text mining
+```
+
+
+# Text data
+
+We are going to use two data sets in this practical.
+
+- A data set with reviews of computers.  
+It is a data set which is annotated for the purpose of aspect-based sentiment analysis. Aspect-based sentiment analysis is a text analysis technique that categorizes data by specific aspects and identifies the sentiment attributed to each one. This data set is provided in the `computer.txt` file, already located in the data folder of the practical. You can also find it from [here](https://www.cs.uic.edu/~liub/FBS/sentiment-analysis.html).
+
+- A data set with all Harry Potter books.  
+This data set contains the full texts of the first seven Harry Potter books (see below the list). Each text is in a character vector with each element representing a single chapter. It is provided from the [harrypotter package](https://github.com/bradleyboehmke/harrypotter) written by [Bradley Boehmke](https://github.com/bradleyboehmke).
+
+  - philosophers_stone: Harry Potter and the Philosophers Stone, published in 1997
+  - chamber_of_secrets: Harry Potter and the Chamber of Secrets, published in 1998
+  - prisoner_of_azkaban: Harry Potter and the Prisoner of Azkaban, published in 1999
+  - goblet_of_fire: Harry Potter and the Goblet of Fire, published in 2000
+  - order_of_the_phoenix: Harry Potter and the Order of the Phoenix, published in 2003
+  - half_blood_prince: Harry Potter and the Half-Blood Prince, published in 2005
+  - deathly_hallows: Harry Potter and the Deathly Hallows, published in 2007
+
+
+# Visualization
+
+### 1. Use `readLines` function to read data from the `computer.txt` file. Then, use `data.frame` function to convert it to a dataframe and assign it to an object called `computer_531`.
+**Hint**: `data.frame(your var name = readLines("your path to the data file"))`
+```{r 1}
+computer_531 <- data.frame(review = readLines("data/Computer.txt"))
+```
+
+
+### 2. Use `View` function to see the data so that you can get an idea of what they look like.
+
+```{r 2}
+# View(computer_531)
+```
+
+### 3. `wordcloud` is a function from the `wordcloud` package, which plots cool word clouds based on word frequencies in a given data set. Use this function to plot the top 50 frequent words with minimum frequency of 5 using your data set. wordcloud will directly tokenize your documents. 
+**Hint**: Check the help file of `wordcloud` function (e.g., `?wordcloud`) to see how to specify the arguments.
+
+<!-- The `%$%` pipe *exposes* the listed dimensions of a data set, such that we can refer to them directly.   " IS THIS COMMENT RELEVANT? "-->  
+
+```{r 3}
+wordcloud(computer_531$review, min.freq = 5, 
+            max.words = 50, random.order = FALSE, 
+            colors = brewer.pal(8, "Dark2"))
+```
+
+
+### 4-1. Use `unnest_tokens` function from `tidytext` package to break the text into individual tokens (a process called [tokenization](https://en.wikipedia.org/wiki/Lexical_analysis#Tokenization)) and use `head` function to see its first several rows.
+**Hint**: `unnest_tokens(data, output column name, input column name)`
+
+```{r 4-1}
+# tokenize texts
+comp_words <- computer_531 %>% 
+  unnest_tokens(word, review)
+
+# check the resulting tokens
+head(comp_words)
+```
+
+
+### 4-2. Use functions from `dplyr` package (e.g., `count`, `arrange`) to select the most frequent 30 tokens and plot a bar chat using `ggplot`.
+**Hint**: One of many different ways to achieve this is as follows.    
+Step 1. Use `count` function to count the frequency of each word.  
+Step 2. Use `arrange` function to sort the counts in descending order (i.e., `arrange(desc(..)))`).  
+Step 3. Use `head` function to select the top 30.  
+Step 4. use `ggplot` along with `geom_col` function to make a bar plot.  
+
+```{r 4-2}
+comp_words %>% 
+  # count the frequency of each word
+  count(word) %>% 
+  # arrange the words by its frequency in descending order
+  arrange(desc(n)) %>% 
+  # select the top 30 most frequent words
+  head(30) %>% 
+  # make a bar plot (reorder words by their frequencies)
+  ggplot(aes(x = n, y = reorder(word, n))) + geom_col() +
+  labs(x = "frequency", y="words") + theme_classic()
+```
+
+```{comment}
+Here you see that many of the top words are *stop words*. In the next part of the practical, we will learn how to proceed with pre-processing and remove the stop words!
+```
+
+
+# Regular expressions 
+
+### 5. Use regular expressions (regex) to find the reviews in `computer_531`, which contain words *"Monitor" or "monitor"*, *"memory" or "Memory"*, and *"Delivery" or "delivery"*. See how many reviews contain each pair of words. 
+**Hint**: One of many different ways to achieve this is as follows.    
+Step 1. Use `str_detect` function from `stringr` package to find the presence of patterns of your interest. See the lecture slide if you are unsure how to specify the *regex*.  
+Step 2. Use `filter` function to only retain the ones that contain the patterns. You can write in one line such as `filter(str_detect(input vector, regex))`.  
+Step 3. Count the number of reviews that contain each pattern.  
+
+
+```{r 5}
+# reviews containing "Monitor" or "monitor"
+reviews_mon <- computer_531 %>% 
+  filter(str_detect(review,"[Mm]onitor"))
+
+# reviews containing "memory" or "Memory"
+reviews_mem <- computer_531 %>% 
+  filter(str_detect(review,"[Mm]emory"))
+
+# reviews containing "Delivery" or "delivery"
+reviews_del <- computer_531 %>% 
+  filter(str_detect(review,"[Dd]elivery"))
+
+# compare the occurrence of each pair of words
+kwords    <- c("Monitor", "Memory", "Delivery")
+nr_kwords <- c(nrow(reviews_mon), nrow(reviews_mem), nrow(reviews_del))
+
+tibble(kwords, nr_kwords)
+```
+
+### 6. Compare `str_detect`, `str_extract`, `str_subset` and `str_match` functios from `stringr` package to check if there are any fully capitalized words in the reviews from the `computer_531` data set.
+
+```{r 6}
+## Detect
+head(str_detect(computer_531$review, '\\b[A-Z]+\\b'))
+## Extract
+head(str_extract(computer_531$review, '\\b[A-Z]+\\b'))
+## Subset
+head(str_subset(computer_531$review, '\\b[A-Z]+\\b'))
+## Match (Useful with captures groups)
+head(str_match(computer_531$review, '\\b([A-Z])+\\b'))
+```
+
+```{comment}
+***Here to add some explanations on the differences between the functions!***
+```
+
+
+### 7. You can also use `str_extract_all` and `str_match_all` to extract all matches. Use either of these functions to see all of the fully capitalized words in the first 10 reviews.
+
+```{r 7}
+# use str_extract_all
+sapply(str_extract_all(computer_531$review[1:10], '\\b[A-Z]+\\b'), paste, collapse =" ")
+# use str_match_all
+sapply(str_match_all(computer_531$review[1:10], '\\b[A-Z]+\\b'), paste, collapse = " ")
+```
+
+```{comment}
+The output from `str_extract_all`/`str_match_all` is a list, which can be pasted together by using `sapply`.
+```
+
+
+### 8. In order to separate aspects and sentiments in the reviews from the `computer_531` data, let's first use a regular expression to extract the characters at the beginning of each line until `##`. Do this for only the first 20 reviews. 
+**Hint**: Use `str_extract` function such that `str_extract(first 20 reviews, regex)`.
+
+```{r 8}
+str_extract(computer_531[1:20,], "[^#]*")
+```
+
+### 9. Add a new column to the `computer_531` data frame  with the name `cleaned_review`, which contains only the review text. And add another column with the name `aspect_sentiment`, which contains the asepcts and sentiment words (i.e., the ones at the end of each review text).
+**Hint**: Use `mutate` and `str_extract` function (e.g., `mutate(cleaned_review = str_extract(...), aspect_sentiment = str_extract(...))`).
+
+```{r 9}
+computer_531 <- computer_531 %>% 
+  mutate(cleaned_review = str_extract(review,"##.*"),
+         aspect_sentiment = str_extract(review,".*##"))
+
+# check the newly added columns
+head(computer_531[-1])
+```
+
+### 10. Run the following code below to create a new column `sentiment` with the values `positive`, `negative` and `neutral`. Assign `neutral` in case when there is no aspect in the corresponding column or the sum of scores is equal to zero. Assign negative (positive) when the sum score is lower (higher) than zero.
+
+```{r 10, include=TRUE, eval=FALSE}
+# define sum_list function which adds the scores
+sum_list <- function(list_values) {
+ sum(as.numeric(list_values))
+}
+
+computer_531 <- computer_531 %>%
+  # sentiment_score: extract the scores and sum them using the sum_list function
+  mutate(sentiment_score = map_dbl(str_extract_all(aspect_sentiment, "-?\\d+"), sum_list),
+                                # assign negative when score < 0
+         sentiment = case_when(sentiment_score < 0 ~ "negative",
+                               # assign negative when score > 0
+                               sentiment_score > 0 ~ "positive",
+                               # assign neutral otherwise
+                               TRUE ~ "neutral"))
+
+head(computer_531)
+```
+
+```{r 10 for answer file, echo=FALSE}
+sum_list <- function(list_values) {
+ sum(as.numeric(list_values))
+}
+
+
+computer_531 <- computer_531 %>%
+  mutate(sentiment_score = map_dbl(str_extract_all(aspect_sentiment, "-?\\d+"), sum_list),
+         sentiment = case_when(sentiment_score < 0 ~ "negative",
+                               sentiment_score > 0 ~ "positive",
+                               TRUE ~ "neutral"))
+
+head(computer_531)
+```
+
+```{comment}
+We can use this pre-processed data in the practical 3 for the purpose of sentiment classification.
+```
+
+
+# Word embeddings
+
+In this part of the practical, we will apply word embedding approaches. A key idea in working with text data concerns representing words as numeric quantities. There are a number of ways to go about this as we reviewed in the lecture. One method that we want to explore today is word embedding. Word embedding techniques such as word2vec and GloVe use neural networks approaches to construct word vectors. With these vector representations of words we can see how similar they are to each other, and also perform other tasks such as sentiment classification.
+
+Let's start the word embedding part with installing the `harrypotter` package using [devtools](https://www.r-project.org/nosvn/pandoc/devtools.html). The `harrypotter` package supplies the first seven novels in the Harry Potter series. You can install and load this package with the following code:
+
+```{r harrydata, include=TRUE, eval=FALSE}
+# devtools::install_github("bradleyboehmke/harrypotter")
+library(harrypotter) # Not to be confused with the CRAN palettes package
+```
+```{r harrydata for answer file, echo=FALSE}
+# devtools::install_github("bradleyboehmke/harrypotter")
+library(harrypotter) # Not to be confused with the CRAN palettes package
+```
+
+
+### 11. Use the code below to load the first seven novels in the Harry Potter series.
+
+```{r 11, include=TRUE, eval=FALSE}
+hp_books <- c("philosophers_stone", "chamber_of_secrets",
+              "prisoner_of_azkaban", "goblet_of_fire",
+              "order_of_the_phoenix", "half_blood_prince",
+              "deathly_hallows")
+
+hp_words <- list(
+  philosophers_stone,
+  chamber_of_secrets,
+  prisoner_of_azkaban,
+  goblet_of_fire,
+  order_of_the_phoenix,
+  half_blood_prince,
+  deathly_hallows
+) %>%
+  # name each list element
+  set_names(hp_books) %>%
+  # convert each book to a data frame and merge into a single data frame
+  map_df(as_tibble, .id = "book") %>%
+  # convert book to a factor
+  mutate(book = factor(book, levels = hp_books)) %>%
+  # remove empty chapters
+  filter(!is.na(value)) %>%
+  # create a chapter id column
+  group_by(book) %>%
+  mutate(chapter = row_number(book))
+```
+
+```{r 11 for answer file, echo = FALSE}
+hp_books <- c("philosophers_stone", "chamber_of_secrets",
+              "prisoner_of_azkaban", "goblet_of_fire",
+              "order_of_the_phoenix", "half_blood_prince",
+              "deathly_hallows")
+
+hp_words <- list(
+  philosophers_stone,
+  chamber_of_secrets,
+  prisoner_of_azkaban,
+  goblet_of_fire,
+  order_of_the_phoenix,
+  half_blood_prince,
+  deathly_hallows
+) %>%
+  # name each list element
+  set_names(hp_books) %>%
+  # convert each book to a data frame and merge into a single data frame
+  map_df(as_tibble, .id = "book") %>%
+  # convert book to a factor
+  mutate(book = factor(book, levels = hp_books)) %>%
+  # remove empty chapters
+  filter(!is.na(value)) %>%
+  # create a chapter id column
+  group_by(book) %>%
+  mutate(chapter = row_number(book))
+```
+<details>
+  <summary>***Check `hp_words` object using `head` function.***</summary>
+```{r}
+head(hp_words)
+```
+</details>
+<br>
+
+### 12. Convert the `hp_words` object into a dataframe and use the `unnest_tokens` function from the `tidytext` package to tokenize the dataframe.
+**Hint**: Use `as.data.frame` function to convert `hp_words` to a dataframe. Then, plug in the resulting dataframe to `unnest_tokens` such as `unnest_tokens(dataframe, output column name, input column name)`.
+
+```{r 12}
+# tokenize the data frame
+hp_words <- as.data.frame(hp_words) %>%
+  unnest_tokens(word, value)
+
+head(hp_words)
+```
+
+### 13. Remove the stop words from the tokenized data frame.
+**Hint**: Use `anti_join` function to filter the `stop_words` from the `tidytext` package. Check the help file if you want further information on either one (e.g., `?anti_join`, `?stop_words`).
+```{r 13}
+hp_words <- hp_words %>% 
+  # remove stop words
+  anti_join(stop_words)
+
+head(hp_words)
+```
+
+### 14. Creates a vocabulary of unique terms using the `create_vocabulary` function from the `text2vec` package and remove the words that they appear less than 5 times.
+**Hint**: Follow the steps below.  
+Step 1. Create a list of words from `hp_words` (iterator object) using `list` function.  
+Step 2. Apply `itoken` function on the word list to create index-tokens.  
+Step 3: Apply `create_vocabulary` function on the `itoken` object to collect unique terms.   
+Step 4: Apply `prune_vocabulary` on the dataframe of unique terms and specify `term_count_min = 5` to filter the infrequent terms.
+
+```{r 14}
+# make it a list (iterator)
+hp_words_ls <- list(hp_words$word)
+
+# create index-tokens
+it <- itoken(hp_words_ls, progressbar = FALSE) 
+
+# collects unique terms 
+hp_vocab <- create_vocabulary(it)
+
+# filters the infrequent terms (number of occurrence is less than 5)
+hp_vocab <- prune_vocabulary(hp_vocab, term_count_min = 5)
+
+# show the resulting vocabulary object
+DT::datatable(hp_vocab, options = list(dom = 'tp'))
+```
+
+```{comment}
+We’ve just created word counts, that’s all the vocabulary object is!
+```
+
+### 15. The next step is to create a [token co-occurrence matrix](https://stackoverflow.com/questions/24073030/what-are-co-occurence-matrixes-and-how-are-they-used-in-nlp)(TCM). First, we need to apply `vocab_vectorizer` function to transform the list of tokens in to vector space. Then, use `create_tcm` function to create a TCM with the window of 5 for context words.
+**Hint**: Follow the steps below.  
+Step 1: Map the words to indices by `vocab_vectorizer(vocabulary object from Q14)`.  
+Step 2: Create a TCM by `create_tcm(it, vectorizer function from Step 1, skip_grams_window = 5)`. `it` is the
+list of iterators over tokens from `itoken`.  
+```{r 15}
+# maps words to indices
+vectorizer <- vocab_vectorizer(hp_vocab)
+
+# use window of 5 for context words
+hp_tcm <- create_tcm(it, vectorizer, skip_grams_window = 5)
+```
+
+```{comment}
+Note that such a matrix will be extremely sparse. Most words do not go with other words in the grand scheme of things. So when they do, it usually matters.
+```
+
+### 16. Use the GlobalVectors as given in the code below to fit the word vectors on our data set. Choose the embedding size (rank variable) equal to 50, and the maximum number of co-occurrences equal to 10. Train word vectors in 20 iterations. You can check the full input arguments of the fit_transform function from [here](https://www.rdocumentation.org/packages/text2vec/versions/0.5.1/topics/GlobalVectors).
+
+```{r 16, include=TRUE, eval=FALSE}
+glove <- GlobalVectors$new(rank = 50, x_max = 10)
+hp_wv_main <- glove$fit_transform(hp_tcm, n_iter = 20, convergence_tol = 0.001)
+```
+
+```{r 16 for answer file, echo=FALSE}
+glove <- GlobalVectors$new(rank = 50, x_max = 10)
+hp_wv_main <- glove$fit_transform(hp_tcm, n_iter = 20, convergence_tol = 0.001)
+```
+
+### 17. The GloVe model learns two sets of word vectors: main and context. Essentially they are the same since the model is symmetric. From the experience learning two sets of word vectors leads to higher quality embeddings (read more [here](http://text2vec.org/glove.html)). Best practice is to combine both the main word vectors and the context word vectors into one matrix. Extract the word vectors and save the summation of them for further questions.
+**Hint**: Follow the steps below.  
+Step 1. Extract context word vectors by `glove$componets`.  
+Step 2. Sum two sets of word vectors (e.g., `hv_wv_main + t(hp_wv_context)`).
+```{r 17, collapse=TRUE}
+# extract context word vector
+hp_wv_context <- glove$components
+
+# check the dimension for both matrices
+dim(hp_wv_main); dim(hp_wv_context) 
+
+# Either word-vectors matrices could work, but the developers of the technique
+# suggest the sum/mean may work better
+hp_word_vectors <- hp_wv_main + t(hp_wv_context) # transpose one matrix to perform matrix addition
+```
+
+### 18. Find the most similar 10 words to each of the words: "harry", "death", and "love".
+**Hint**: Follow the steps below.  
+Step 1. Extract the row of the corresponding word from the word vector matrix (e.g., matrix["harry", , drop = FALSE]).  
+Step 2. Use `sim2` function with the cosine similarity measure to calculate the pairwise similarities between the chosen row vector (from Step 1) and the rest of words: `sim2(x = whole word vector matrix, y = chosen row vector, method = "cosine", norm = "l2")`.  
+Step 3. Sort the resulting column vector of similarities in descending order and present the first 10 values. For example, you can do this by `head(sort(similarity vector, decrasing = TRUE), 10)`.  
+Step 4. Repeat *Step 1* - *Step 3*  for the other words. 
+```{r 18}
+# extract the row of "harry"
+harry <- hp_word_vectors["harry", , drop = FALSE]
+# calculates pairwise similarities between"harry" and the rest of words
+cos_sim_harry <- sim2(x = hp_word_vectors, y = harry, method = "cosine", norm = "l2")
+# the top 10 words with the highest similarities
+head(sort(cos_sim_harry[,1], decreasing = T), 10)
+
+# extract the row of "death"
+death <- hp_word_vectors["death", , drop = FALSE]
+# calculates pairwise similarities between"harry" and the rest of words
+cos_sim_death <- sim2(x = hp_word_vectors, y = death, method = "cosine", norm = "l2")
+# the top 10 words with the highest similarities
+head(sort(cos_sim_death[,1], decreasing = T), 10)
+
+# extract the row of "love"
+love <- hp_word_vectors["love", , drop = FALSE]
+# calculates pairwise similarities between"harry" and the rest of words
+cos_sim_love <- sim2(x = hp_word_vectors, y = love, method = "cosine", norm = "l2")
+# top 10 words with the highest similarities
+head(sort(cos_sim_love[,1], decreasing = T), 10)
+```
+
+
+### 19. Now you can play with word vectors! For example, add the word vector of "harry" with the word vector of "love" and subtract them from the word vector of "death". What are the top terms in your result?
+**Hint**: You can literally add/subtract the word vectors to each other (e.g., harry word vector + love word vector - death word vector). Once you have the resulting vector, calculate similarities as you did previously in Question 18.
+```{r 19}
+# add/subtract word vectors
+test <- harry + love - death
+# calculates pairwise similarities between"harry" and the rest of words
+cos_sim_test <- sim2(x = hp_word_vectors, y = test, method = "cosine", norm = "l2")
+# top 10 words with the highest similarities
+head(sort(cos_sim_test[,1], decreasing = T), 10)
+```
+
+---
+
+# OPTIONAL: Wikipedia word embeddings
+
+### 20. Repeat the same analysis as for Harry Potter novel series with texts from Wikipedia. Start with the code below and train the word vectors using the wiki object.
+```{r wiki, include=TRUE, eval=FALSE}
+# The data file is provided in the practical folder which you need to unzip it,
+# if you do not have it the rest of the code will download it for you
+text8_file <- "data/text8/text8"
+if (!file.exists(text8_file)) {
+  download.file("http://mattmahoney.net/dc/text8.zip", "data/text8.zip")
+  unzip("data/text8.zip", files = "text8", exdir = "data/texts_raw/")
+}
+wiki <- readLines(text8_file, n = 1, warn = FALSE)
+```
+
+```{r wiki for answer file, echo=FALSE}
+text8_file <- "data/text8/text8"
+if (!file.exists(text8_file)) {
+  download.file("http://mattmahoney.net/dc/text8.zip", "data/text8.zip")
+  unzip("data/text8.zip", files = "text8", exdir = "data/texts_raw/")
+}
+wiki <- readLines(text8_file, n = 1, warn = FALSE)
+```
+
+
+```{r 20, cache=TRUE}
+tokens <- space_tokenizer(wiki)
+it <- itoken(tokens, progressbar = FALSE)
+vocab <- create_vocabulary(it)
+vocab <- prune_vocabulary(vocab, term_count_min = 5L)
+vectorizer <- vocab_vectorizer(vocab)
+
+tcm <- create_tcm(it, vectorizer, skip_grams_window = 5L)
+
+glove <- GlobalVectors$new(rank = 50, x_max = 10)
+
+wv_main <- glove$fit_transform(tcm, n_iter = 20, convergence_tol = 0.001)
+wv_context <- glove$components
+word_vectors <- wv_main + t(wv_context)
+```
+
+
+### 21. Time to play with the trained Wikipedia word vectors! Use the Wikipedia word embeddings and try the two famous examples below.
+
+ - Example 1) king - man + woman = queen  
+ - Example 2) Paris - France + Germany = Berlin  
+
+```{r 21}
+berlin <- word_vectors["paris", , drop = FALSE] -
+  word_vectors["france", , drop = FALSE] +
+  word_vectors["germany", , drop = FALSE]
+berlin_cos_sim <- sim2(x = word_vectors, y = berlin, method = "cosine", norm = "l2")
+head(sort(berlin_cos_sim[,1], decreasing = TRUE), 5)
+
+queen <- word_vectors["king", , drop = FALSE] -
+  word_vectors["man", , drop = FALSE] +
+  word_vectors["woman", , drop = FALSE]
+queen_cos_sim <- sim2(x = word_vectors, y = queen, method = "cosine", norm = "l2")
+head(sort(queen_cos_sim[,1], decreasing = TRUE), 20)
+
+```
+
+
