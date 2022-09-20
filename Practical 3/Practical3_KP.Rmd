@@ -15,7 +15,6 @@ output:
     highlight: tango
     df_print: paged
 ---
-
 <style type="text/css">
 @import url('https://fonts.googleapis.com/css2?family=Lato:wght@300;400&display=swap');
 
@@ -33,7 +32,6 @@ h3.subtitle{ /* Subtitle */
   color: DarkBlue;
   margin-top:0;
 }
-
 h1 { /* Header 1 */
   font-size: 20px;
   font-weight: bold;
@@ -46,7 +44,6 @@ h3 { /* Header 3 */
   font-size: 15px;
   line-height: 1.6;
 }
-
 pre { /* Code block - determines code spacing between lines */
   font-size: 13px;
 }
@@ -71,8 +68,8 @@ opts_chunk$set(include = params$answers,
 # collapse = TRUE  --> see if it is necessary any where
 ```
 
-Welcome to the third practical on text mining!
-The aim of this practical is to enhance your understanding in sentiment analysis and learn three different ways of performing sentiment analysis. Note that we will evaluate their performance using all data for the unsupervised models. And for the supervised models, we will train the models in 80% of the data and evaluate their performance in the remaining 20%.
+Welcome to the third practical on text mining!  
+The aim of this practical is to enhance your understanding in sentiment analysis and learn three different ways of performing sentiment analysis.
 
 In this practical, we will focus on the following methods:
 
@@ -90,6 +87,7 @@ library(text2vec)
 library(tidyverse)
 library(tidytext)
 library(ggplot2)
+
 library(caret)
 library(rpart)
 library(rpart.plot)
@@ -106,241 +104,331 @@ We are going to use one data set `movie_review` in this practical:
 data("movie_review")
 as_tibble(movie_review)
 
-knitr::knit_exit()
 ```
 
+# Dictionary-based
 
+The `tidytext` package contains 4 general purpose lexicons in the sentiments dataset.
 
+ - `AFINN`: list of English words rated for valence between -5 and +5
+ - `bing`: list of positive and negative sentiment
+ - `nrc`: list of English words and their associations with 8 emotions (anger, fear, anticipation, trust, surprise, sadness, joy, and disgust) and 2 sentiments (negative and positive); binary
+ - `loughran`: list of sentiment words for accounting and finance by category (Negative, Positive, Uncertainty, Litigious, Strong Modal, Weak Modal, Constraining)
 
----
-# OPTIONAL: Sentiment classification with pre-trained word vectors
-
-In this part of practical, we will show an example of loading pre-trained word vectors and fine-tune them for the purpose of sentiment classification on movie reviews.  
-Besides the packages loaded above, we need to install the `TensorFlow` and `Keras` packages for R.
-
-The `TensorFlow` package provides code completion and inline help for the [TensorFlow API](https://www.tensorflow.org/api_docs/python/tf/all_symbols) when running within the RStudio IDE. The `TensorFlow` API is composed of a set of Python modules that enable constructing and executing `TensorFlow` graphs.
-
-Install the `TensorFlow` R package from GitHub as follows:
-
-```{r, include=TRUE}
-# devtools::install_github("rstudio/tensorflow")
-```
-
-Then, use the `install_tensorflow` function to install `TensorFlow`:
-
-```{r, include=TRUE}
-library(tensorflow)
-# install_tensorflow(package_url = "https://pypi.python.org/packages/b8/d6/af3d52dd52150ec4a6ceb7788bfeb2f62ecb6aa2d1172211c4db39b349a2/tensorflow-1.3.0rc0-cp27-cp27mu-manylinux1_x86_64.whl#md5=1cf77a2360ae2e38dd3578618eacc03b")
-```
-
-The provided url just installs the latest TensorFlow version, you can also run this line without providing any argument to the install_tensorflow function.
-
-Finally, you can confirm that the installation succeeded with:
-
-```{r, include=TRUE, collapse=TRUE}
-tmr <- tf$constant("Text Mining with R!")
-print(tmr)
-```
-
-This will provide you with a default installation of `TensorFlow` suitable for getting started with the TensorFlow R package. See the article on installation (https://tensorflow.rstudio.com/installation/) to learn about more advanced options, including installing a version of `TensorFlow` that takes advantage of Nvidia GPUs if you have the correct CUDA libraries installed.
-
-To install the Keras package you first run either of the following lines:
-```{r, include=TRUE}
-# install.packages("keras")
-# devtools::install_github("rstudio/keras")
-```
-
-Then, use the `install_keras()` function to install Keras. The `Keras` R interface uses the `TensorFlow` backend engine by default. This will provide you with default CPU-based installations of `Keras` and TensorFlow. If you want a more customized installation, e.g. if you want to take advantage of NVIDIA GPUs, see the documentation for `install_keras()` and the article on installation (https://tensorflow.rstudio.com/installation/).
-
-The ISLR authors also prepared an installation guide to Python, Reticulate and Keras:
-https://web.stanford.edu/~hastie/ISLR2/keras-instructions.html
-
----
-
-# Sentiment classification with pre-trained word vectors
-
----
-
-Now we have `TensorFlow` and `Keras` ready for fine-tuning pre-trained word embeddings for sentiment classification on movie reviews. 
-
-Rememebr to load the `Keras` library:
-```{r, include=TRUE}
-library(keras)
-```
-
-For sentiment classification with pre-trained word vectors, we want to use [GloVe](https://nlp.stanford.edu/projects/glove/) pretrained word vectors. These word vectors were trained on Wikipedia 2014 and Gigaword 5 containing 6B tokens, 400K vocab, uncased, 50d, 100d, 200d, & 300d vectors. Download the `glove.6B.300d.txt` file manually from the website or use the code below for this purpose.
-
-```{r glove vectors, include = TRUE, cache=TRUE}
-# Download Glove vectors if necessary
-if (!file.exists('glove.6B.zip')) {
-  download.file('https://nlp.stanford.edu/data/glove.6B.zip',destfile = 'glove.6B.zip')
-  unzip('glove.6B.zip')
-}
-```
-
----
-
-1. **Use the code below to load the pre-trained word vectors from the file 'glove.6B.300d.txt' (if you have memory issues load the file 'glove.6B.50d.txt' instead).**
-
----
+### 1. We are going to use `bing` lexicon in this practical. Using the `get_sentiments` function, load the “bing” dictionary and store it in an objects called `bing_sentiments`.
 
 ```{r 1}
-
-# load glove vectors
-vectors <- data.table::fread('data/glove.6B.50d.txt', data.table = F, encoding = 'UTF-8')
-colnames(vectors) <- c('word', paste('dim',1:50,sep = '_'))
-
-# convert vectors to dataframe
-vectors <- as_tibble(vectors)
+bing_sentiments  <- get_sentiments("bing")
+bing_sentiments
 ```
 
----
 
-2. **IMDB movie reviews is a labeled data set available with the `text2vec` package. This data set consists of 5000 IMDB movie reviews, specially selected for sentiment analysis. The sentiment of the reviews is binary, meaning an IMDB rating < 5 results in a sentiment score of 0, and a rating >=7 has a sentiment score of 1. No individual movie has more than 30 reviews. Load this data set and convert it to a dataframe.**
-
----
+### 2. Use `unnest_tokens` function from `tidytext` package to break the text into individual tokens (a process called [tokenization](https://en.wikipedia.org/wiki/Lexical_analysis#Tokenization)) and use `head` function to see its first several rows.
 
 ```{r 2}
-# load an example dataset from text2vec
-data("movie_review")
-as_tibble(movie_review)
+# tokenize the reviews
+tidy_review <- movie_review %>% 
+  unnest_tokens(word, review) %>% 
+  select(-sentiment)  ## we don't use the original sentiment?
+
+head(tidy_review)
 ```
 
----
 
-3. **To create a learning model using `Keras`, let's first define the hyperparameters. Define the parameters of your `Keras` model with a maximum of 10000 words, maxlen of 60 and word embedding size of 300 (if you had memory problems change the embedding dimension to a smaller value, e.g., 50).**
-
----
+### 3. Use `inner_join` function to find a sentiment score for each of the tokenized review words using Bing lexicon (i.e., `bing_sentiments`).
 
 ```{r 3}
-max_words <- 1e4
-maxlen    <- 60
-dim_size  <- 50
+review_sentiment <- tidy_review %>%
+  inner_join(bing_sentiments)
+
+head(review_sentiment)
 ```
 
----
-
-4. **Use the text_tokenizer function from `Keras` and tokenize the imdb review data using a maximum of 10000 words.**
-
----
+### 4. Count up how many positive and negative words there are in the specified `id`s. Then, compute the net sentiment score by subtracting the count of negative words from the positive words. 
+**Hint**: You can use `count` function from `dplyr` package.
 
 ```{r 4}
-# tokenize the input data and then fit the created object
-word_seqs <- text_tokenizer(num_words = max_words) %>%
-  fit_text_tokenizer(movie_review$review)
+review_sentiment <- review_sentiment %>% 
+  # count the sentiment (positive/negative) per id
+  count(id, sentiment) %>% 
+  # wide-format
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  # compute the sentiment score
+  mutate(sentiment_score = positive - negative)
 ```
 
----
-
-5. **Transform each text into a sequence of integers (word indices) and use the `pad_sequences` function to pad the sequences.**
-
----
+### 5. Plot these sentiment scores across the `id`s. 
+**Hint**: Map `id` onto x-axis and `sentiment_score` onto y-axis.
 
 ```{r 5}
-# apply tokenizer to the text and get indices instead of words
-# later pad the sequence
-x_train <- texts_to_sequences(word_seqs, movie_review$review) %>%
-  pad_sequences(maxlen = maxlen)
+review_sentiment %>% 
+  mutate(color = ifelse(sentiment_score > 0, "pos", "neg")) %>%
+  ggplot(aes(x = reorder(id, -sentiment_score), y = sentiment_score, fill = color)) +
+  geom_col() + labs(x = "id") +
+  theme_classic() + theme(axis.text.x=element_blank()) 
 ```
 
----
+### 6. Create a [confusion matrix](https://en.wikipedia.org/wiki/Confusion_matrix), which is an insightful summary of the correct and incorrect classifications. 
+**Hint**: You can use `table` function.
+```{r}
+# Dichotomize the sentiment score to match with the original sentiment scores
+review_sentiment <- review_sentiment %>% 
+  # 0: scores lower than five, 1: scores higher than five
+  mutate(dicho_sentiment = ifelse(sentiment_score < 5, 0, 1))
 
-6. **Convert the sequence into a dataframe.**
+## not sure why 5 rows are gone?!
+movie_review <- movie_review %>% 
+  filter(id %in% review_sentiment$id)
 
----
-
-```{r 6}
-# unlist word indices
-word_indices <- unlist(word_seqs$word_index)
-
-# then place them into data.frame 
-dic <- data.frame(word = names(word_indices), key = word_indices, stringsAsFactors = FALSE) %>%
-  arrange(key) %>% .[1:max_words,]
+## terrible ...
+table(true = movie_review$sentiment, predicted = review_sentiment$dicho_sentiment)
 ```
 
----
 
-7. **Use the code below to join the dataframe of sequences (word indices) from the IMDB reviews with GloVe pre-trained word vectors.**
+# TF-IDF based
 
----
 
-```{r 7, message = FALSE, warning = FALSE, include = TRUE}
-# join the words with GloVe vectors and
-# if a word does not exist in GloVe, then fill NA's with 0
-word_embeds <- dic  %>%
-  left_join(vectors) %>% .[,3:52] %>% replace(., is.na(.), 0) %>% as.matrix()
-```
 
----
 
-8. **Extract the outcome variable from the `sentiment` column in the original dataframe and name it `y_train.`**
 
----
 
-```{r 8}
-# the outcome variable
-y_train <- as.matrix(movie_review$sentiment)
-```
 
----
 
-9. **Use the `Keras` functional API and create a neural network model as below. Can you describe this model?**
 
----
 
-```{r 9, message = FALSE, warning = FALSE, include = TRUE}
-# Use Keras Functional API 
-input <- layer_input(shape = list(maxlen), name = "input")
 
-model <- input %>%
-  layer_embedding(input_dim = max_words, output_dim = dim_size, input_length = maxlen,
-                  # put weights into list and do not allow training
-                  weights = list(word_embeds), trainable = FALSE) %>%
-  layer_spatial_dropout_1d(rate = 0.2) %>%
-  bidirectional(
-    layer_gru(units = 80, return_sequences = TRUE)
-  )
-max_pool <- model %>% layer_global_max_pooling_1d()
-ave_pool <- model %>% layer_global_average_pooling_1d()
 
-output <- layer_concatenate(list(ave_pool, max_pool)) %>%
-  layer_dense(units = 1, activation = "sigmoid")
 
-model <- keras_model(input, output)
 
-# model summary
-model
-```
+<!-- --- -->
+<!-- # OPTIONAL: Sentiment classification with pre-trained word vectors -->
 
----
+<!-- In this part of practical, we will show an example of loading pre-trained word vectors and fine-tune them for the purpose of sentiment classification on movie reviews. -->
+<!-- Besides the packages loaded above, we need to install the `TensorFlow` and `Keras` packages for R. -->
 
-10. **Compile the model with an 'adam' optimizer, and the binary_crossentropy loss. You can choose accuracy or AUC for the metrics.**
+<!-- The `TensorFlow` package provides code completion and inline help for the [TensorFlow API](https://www.tensorflow.org/api_docs/python/tf/all_symbols) when running within the RStudio IDE. The `TensorFlow` API is composed of a set of Python modules that enable constructing and executing `TensorFlow` graphs. -->
 
----
+<!-- Install the `TensorFlow` R package from GitHub as follows: -->
 
-```{r 10}
-# instead of accuracy we can use "AUC" metrics from "tensorflow.keras"
-model %>% compile(
-  optimizer = "adam", # optimizer = optimizer_rmsprop(),
-  loss = "binary_crossentropy",
-  metrics = tensorflow::tf$keras$metrics$AUC() # metrics = c('accuracy')
-)
-```
+<!-- ```{r, include=TRUE} -->
+<!-- # devtools::install_github("rstudio/tensorflow") -->
+<!-- ``` -->
 
----
+<!-- Then, use the `install_tensorflow` function to install `TensorFlow`: -->
 
-11. **Fit the model with 10 epochs (iterations), batch_size = 32, and validation_split = 0.2. Check the training performance versus the validation performance.**
+<!-- ```{r, include=TRUE} -->
+<!-- library(tensorflow) -->
+<!-- # install_tensorflow(package_url = "https://pypi.python.org/packages/b8/d6/af3d52dd52150ec4a6ceb7788bfeb2f62ecb6aa2d1172211c4db39b349a2/tensorflow-1.3.0rc0-cp27-cp27mu-manylinux1_x86_64.whl#md5=1cf77a2360ae2e38dd3578618eacc03b") -->
+<!-- ``` -->
 
----
+<!-- The provided url just installs the latest TensorFlow version, you can also run this line without providing any argument to the install_tensorflow function. -->
 
-```{r 11}
-history <- model %>% keras::fit(
-  x_train, y_train,
-  epochs = 10,
-  batch_size = 32,
-  validation_split = 0.2
-)
+<!-- Finally, you can confirm that the installation succeeded with: -->
 
-plot(history)
-```
+<!-- ```{r, include=TRUE, collapse=TRUE} -->
+<!-- tmr <- tf$constant("Text Mining with R!") -->
+<!-- print(tmr) -->
+<!-- ``` -->
+
+<!-- This will provide you with a default installation of `TensorFlow` suitable for getting started with the TensorFlow R package. See the article on installation (https://tensorflow.rstudio.com/installation/) to learn about more advanced options, including installing a version of `TensorFlow` that takes advantage of Nvidia GPUs if you have the correct CUDA libraries installed. -->
+
+<!-- To install the Keras package you first run either of the following lines: -->
+<!-- ```{r, include=TRUE} -->
+<!-- # install.packages("keras") -->
+<!-- # devtools::install_github("rstudio/keras") -->
+<!-- ``` -->
+
+<!-- Then, use the `install_keras()` function to install Keras. The `Keras` R interface uses the `TensorFlow` backend engine by default. This will provide you with default CPU-based installations of `Keras` and TensorFlow. If you want a more customized installation, e.g. if you want to take advantage of NVIDIA GPUs, see the documentation for `install_keras()` and the article on installation (https://tensorflow.rstudio.com/installation/). -->
+
+<!-- The ISLR authors also prepared an installation guide to Python, Reticulate and Keras: -->
+<!-- https://web.stanford.edu/~hastie/ISLR2/keras-instructions.html -->
+
+<!-- --- -->
+
+<!-- # Sentiment classification with pre-trained word vectors -->
+
+<!-- --- -->
+
+<!-- Now we have `TensorFlow` and `Keras` ready for fine-tuning pre-trained word embeddings for sentiment classification on movie reviews. -->
+
+<!-- Rememebr to load the `Keras` library: -->
+<!-- ```{r, include=TRUE} -->
+<!-- library(keras) -->
+<!-- ``` -->
+
+<!-- For sentiment classification with pre-trained word vectors, we want to use [GloVe](https://nlp.stanford.edu/projects/glove/) pretrained word vectors. These word vectors were trained on Wikipedia 2014 and Gigaword 5 containing 6B tokens, 400K vocab, uncased, 50d, 100d, 200d, & 300d vectors. Download the `glove.6B.300d.txt` file manually from the website or use the code below for this purpose. -->
+
+<!-- ```{r glove vectors, include = TRUE, cache=TRUE} -->
+<!-- # Download Glove vectors if necessary -->
+<!-- if (!file.exists('glove.6B.zip')) { -->
+<!--   download.file('https://nlp.stanford.edu/data/glove.6B.zip',destfile = 'glove.6B.zip') -->
+<!--   unzip('glove.6B.zip') -->
+<!-- } -->
+<!-- ``` -->
+
+<!-- --- -->
+
+<!-- 1. **Use the code below to load the pre-trained word vectors from the file 'glove.6B.300d.txt' (if you have memory issues load the file 'glove.6B.50d.txt' instead).** -->
+
+<!-- --- -->
+
+<!-- ```{r} -->
+
+<!-- # load glove vectors -->
+<!-- vectors <- data.table::fread('data/glove.6B.50d.txt', data.table = F, encoding = 'UTF-8') -->
+<!-- colnames(vectors) <- c('word', paste('dim',1:50,sep = '_')) -->
+
+<!-- # convert vectors to dataframe -->
+<!-- vectors <- as_tibble(vectors) -->
+<!-- ``` -->
+
+<!-- --- -->
+
+<!-- 2. **IMDB movie reviews is a labeled data set available with the `text2vec` package. This data set consists of 5000 IMDB movie reviews, specially selected for sentiment analysis. The sentiment of the reviews is binary, meaning an IMDB rating < 5 results in a sentiment score of 0, and a rating >=7 has a sentiment score of 1. No individual movie has more than 30 reviews. Load this data set and convert it to a dataframe.** -->
+
+<!-- --- -->
+
+<!-- ```{r} -->
+<!-- # load an example dataset from text2vec -->
+<!-- data("movie_review") -->
+<!-- as_tibble(movie_review) -->
+<!-- ``` -->
+
+<!-- --- -->
+
+<!-- 3. **To create a learning model using `Keras`, let's first define the hyperparameters. Define the parameters of your `Keras` model with a maximum of 10000 words, maxlen of 60 and word embedding size of 300 (if you had memory problems change the embedding dimension to a smaller value, e.g., 50).** -->
+
+<!-- --- -->
+
+<!-- ```{r } -->
+<!-- max_words <- 1e4 -->
+<!-- maxlen    <- 60 -->
+<!-- dim_size  <- 50 -->
+<!-- ``` -->
+
+<!-- --- -->
+
+<!-- 4. **Use the text_tokenizer function from `Keras` and tokenize the imdb review data using a maximum of 10000 words.** -->
+
+<!-- --- -->
+
+<!-- ```{r } -->
+<!-- # tokenize the input data and then fit the created object -->
+<!-- word_seqs <- text_tokenizer(num_words = max_words) %>% -->
+<!--   fit_text_tokenizer(movie_review$review) -->
+<!-- ``` -->
+
+<!-- --- -->
+
+<!-- 5. **Transform each text into a sequence of integers (word indices) and use the `pad_sequences` function to pad the sequences.** -->
+
+<!-- --- -->
+
+<!-- ```{r } -->
+<!-- # apply tokenizer to the text and get indices instead of words -->
+<!-- # later pad the sequence -->
+<!-- x_train <- texts_to_sequences(word_seqs, movie_review$review) %>% -->
+<!--   pad_sequences(maxlen = maxlen) -->
+<!-- ``` -->
+
+<!-- --- -->
+
+<!-- 6. **Convert the sequence into a dataframe.** -->
+
+<!-- --- -->
+
+<!-- ```{r } -->
+<!-- # unlist word indices -->
+<!-- word_indices <- unlist(word_seqs$word_index) -->
+
+<!-- # then place them into data.frame -->
+<!-- dic <- data.frame(word = names(word_indices), key = word_indices, stringsAsFactors = FALSE) %>% -->
+<!--   arrange(key) %>% .[1:max_words,] -->
+<!-- ``` -->
+
+<!-- --- -->
+
+<!-- 7. **Use the code below to join the dataframe of sequences (word indices) from the IMDB reviews with GloVe pre-trained word vectors.** -->
+
+<!-- --- -->
+
+<!-- ```{r , message = FALSE, warning = FALSE, include = TRUE} -->
+<!-- # join the words with GloVe vectors and -->
+<!-- # if a word does not exist in GloVe, then fill NA's with 0 -->
+<!-- word_embeds <- dic  %>% -->
+<!--   left_join(vectors) %>% .[,3:52] %>% replace(., is.na(.), 0) %>% as.matrix() -->
+<!-- ``` -->
+
+<!-- --- -->
+
+<!-- 8. **Extract the outcome variable from the `sentiment` column in the original dataframe and name it `y_train.`** -->
+
+<!-- --- -->
+
+<!-- ```{r } -->
+<!-- # the outcome variable -->
+<!-- y_train <- as.matrix(movie_review$sentiment) -->
+<!-- ``` -->
+
+<!-- --- -->
+
+<!-- 9. **Use the `Keras` functional API and create a neural network model as below. Can you describe this model?** -->
+
+<!-- --- -->
+
+<!-- ```{r , message = FALSE, warning = FALSE, include = TRUE} -->
+<!-- # Use Keras Functional API -->
+<!-- input <- layer_input(shape = list(maxlen), name = "input") -->
+
+<!-- model <- input %>% -->
+<!--   layer_embedding(input_dim = max_words, output_dim = dim_size, input_length = maxlen, -->
+<!--                   # put weights into list and do not allow training -->
+<!--                   weights = list(word_embeds), trainable = FALSE) %>% -->
+<!--   layer_spatial_dropout_1d(rate = 0.2) %>% -->
+<!--   bidirectional( -->
+<!--     layer_gru(units = 80, return_sequences = TRUE) -->
+<!--   ) -->
+<!-- max_pool <- model %>% layer_global_max_pooling_1d() -->
+<!-- ave_pool <- model %>% layer_global_average_pooling_1d() -->
+
+<!-- output <- layer_concatenate(list(ave_pool, max_pool)) %>% -->
+<!--   layer_dense(units = 1, activation = "sigmoid") -->
+
+<!-- model <- keras_model(input, output) -->
+
+<!-- # model summary -->
+<!-- model -->
+<!-- ``` -->
+
+<!-- --- -->
+
+<!-- 10. **Compile the model with an 'adam' optimizer, and the binary_crossentropy loss. You can choose accuracy or AUC for the metrics.** -->
+
+<!-- --- -->
+
+<!-- ```{r } -->
+<!-- # instead of accuracy we can use "AUC" metrics from "tensorflow.keras" -->
+<!-- model %>% compile( -->
+<!--   optimizer = "adam", # optimizer = optimizer_rmsprop(), -->
+<!--   loss = "binary_crossentropy", -->
+<!--   metrics = tensorflow::tf$keras$metrics$AUC() # metrics = c('accuracy') -->
+<!-- ) -->
+<!-- ``` -->
+
+<!-- --- -->
+
+<!-- 11. **Fit the model with 10 epochs (iterations), batch_size = 32, and validation_split = 0.2. Check the training performance versus the validation performance.** -->
+
+<!-- --- -->
+
+<!-- ```{r } -->
+<!-- history <- model %>% keras::fit( -->
+<!--   x_train, y_train, -->
+<!--   epochs = 10, -->
+<!--   batch_size = 32, -->
+<!--   validation_split = 0.2 -->
+<!-- ) -->
+
+<!-- plot(history) -->
+<!-- ``` -->
 

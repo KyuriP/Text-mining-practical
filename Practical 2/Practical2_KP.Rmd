@@ -3,7 +3,7 @@ title: "Text Mining Practical 2"
 subtitle: "Regular expressions and word embedding"
 author: "Javier Garcia Bernardo"
 params:
-  answers: false
+  answers: true
 urlcolor: blue
 output:
   html_document:
@@ -33,7 +33,6 @@ h3.subtitle{ /* Subtitle */
   color: DarkBlue;
   margin-top:0;
 }
-
 h1 { /* Header 1 */
   font-size: 20px;
   font-weight: bold;
@@ -45,8 +44,6 @@ h2 { /* Header 2 */
 h3 { /* Header 3 */
   font-size: 15px;
   line-height: 1.6;
-}
-
 pre { /* Code block - determines code spacing between lines */
   font-size: 13px;
 }
