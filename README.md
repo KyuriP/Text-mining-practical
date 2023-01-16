@@ -1,2 +1,2 @@
 # Text-mining-practical
-Practicals for the Data Wrangling course @ Utrecht University
+Practical assignments on text mining for the Data Wrangling course @ Utrecht University
